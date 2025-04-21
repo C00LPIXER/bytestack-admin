@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "@/components/layouts/Sidebar";
 import { DataTable } from "@/components/shared/DataTable";
@@ -8,13 +8,25 @@ import { toast } from "sonner";
 import { fetchUsers, updateUser } from "@/service/admin/api/adminApi";
 import { User } from "@/types/user";
 import { useDebounce } from "@/hooks/useDebounce";
+import { ConfirmationDialog } from "@/components/shared/ConfirmationDialog";
 
 const Users: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(8);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const debouncedSearch = useDebounce(search, 500); // Debounce search input
+  const debouncedSearch = useDebounce(search, 500);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, debouncedSearch]);
+
+  const handleBanClick = (user: User) => {
+    setSelectedUser(user);
+    setIsDialogOpen(true);
+  };
 
   const previousDataRef = useRef<{ users: User[]; total: number } | null>(null);
 
@@ -36,17 +48,22 @@ const Users: React.FC = () => {
     window.open(`/u/${user.slug}`, "_blank");
   };
 
-  const handleBanUser = async (user: User) => {
+  const handleConfirmBanToggle = async () => {
+    if (!selectedUser) return;
+
     try {
-      await updateUser(user._id, { isBanned: !user.isBanned });
+      await updateUser(selectedUser._id, { isBanned: !selectedUser.isBanned });
       toast.success(
-        user.isBanned
-          ? `${user.name} has been unbanned`
-          : `${user.name} has been banned`
+        selectedUser.isBanned
+          ? `${selectedUser.name} has been unbanned`
+          : `${selectedUser.name} has been banned`
       );
       refetch();
     } catch {
       toast.error("Failed to update user status");
+    } finally {
+      setSelectedUser(null);
+      setIsDialogOpen(false); // close dialog here
     }
   };
 
@@ -84,7 +101,7 @@ const Users: React.FC = () => {
     { label: "See Profile", onClick: handleSeeProfile },
     {
       label: (user: User) => (user.isBanned ? "Unban" : "Ban"),
-      onClick: handleBanUser,
+      onClick: handleBanClick,
     },
   ];
 
@@ -139,6 +156,21 @@ const Users: React.FC = () => {
           onPageChange={setPage}
         />
       </div>
+      {selectedUser && (
+        <ConfirmationDialog
+          isOpen={isDialogOpen}
+          setIsOpen={setIsDialogOpen}
+          trigger={<></>}
+          title={selectedUser.isBanned ? "Unban User" : "Ban User"}
+          description={`Are you sure you want to ${
+            selectedUser.isBanned ? "unban" : "ban"
+          } ${selectedUser.name}?`}
+          confirmText={selectedUser.isBanned ? "Unban" : "Ban"}
+          cancelText="Cancel"
+          onConfirm={handleConfirmBanToggle}
+          onCancel={() => setSelectedUser(null)}
+        />
+      )}
     </div>
   );
 };
